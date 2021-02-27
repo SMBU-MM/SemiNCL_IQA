@@ -41,13 +41,13 @@ class BasicBlock(nn.Module):
         # Both self.conv1 and self.downsample layers downsample the input when stride != 1
         self.ds = ds
         self.conv1 = weight_norm(conv3x3(inplanes, planes, stride))
-        self.bn1 = weight_norm(norm_layer(planes))
+        self.bn1 = norm_layer(planes)
         self.relu = nn.ReLU(inplace=True)
         self.conv2 = weight_norm(conv3x3(planes, planes))
-        self.bn2 = weight_norm(norm_layer(planes))
+        self.bn2 = norm_layer(planes)
         if ds == True:
             self.downsample = nn.Sequential(weight_norm(conv1x1(inplanes, planes, stride)),
-            weight_norm(nn.BatchNorm2d(planes, eps=1e-5, momentum=0.1, affine=True, track_running_stats=True))
+            nn.BatchNorm2d(planes, eps=1e-5, momentum=0.1, affine=True, track_running_stats=True)
             )
         else:
             self.downsample = None
