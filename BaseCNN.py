@@ -111,10 +111,10 @@ class BaseCNN(nn.Module):
         nn.init.kaiming_normal_(self.backbone3.fc.weight_v.data)
         nn.init.kaiming_normal_(self.backbone4.fc.weight_v.data)
         # Set weight_g with a constant value 1
-        nn.init.constant_(self.backbone1.fc.weight_v.data, val=1)
-        nn.init.constant_(self.backbone2.fc.weight_v.data, val=1)
-        nn.init.constant_(self.backbone3.fc.weight_v.data, val=1)
-        nn.init.constant_(self.backbone4.fc.weight_v.data, val=1)
+        nn.init.constant_(self.backbone1.fc.weight_g.data, val=1)
+        nn.init.constant_(self.backbone2.fc.weight_g.data, val=1)
+        nn.init.constant_(self.backbone3.fc.weight_g.data, val=1)
+        nn.init.constant_(self.backbone4.fc.weight_g.data, val=1)
         
         ##########################################################
         # set all weight_g non-trainable
