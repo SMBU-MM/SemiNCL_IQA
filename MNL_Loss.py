@@ -52,7 +52,7 @@ class Ncl_loss(torch.nn.Module):
         ###############################################################
         if g==None:
             y1_pred_std = torch.std(torch.cat([item.unsqueeze(1) for item in y1], dim=1), dim=1)
-            y1_var_std = torch.sqrt(torch.mean(torch.cat([item.unsqueeze(1) for item in y1_var], dim=1)/len(y2), dim=1))
+            y1_var_std = torch.sqrt(torch.mean(torch.cat([item.unsqueeze(1) for item in y1_var], dim=1)/len(y1), dim=1))
 
             y2_pred_std = torch.std(torch.cat([item.unsqueeze(1) for item in y2], dim=1), dim=1)
             y2_var_std = torch.sqrt(torch.mean(torch.cat([item.unsqueeze(1) for item in y2_var], dim=1)/len(y2), dim=1))
