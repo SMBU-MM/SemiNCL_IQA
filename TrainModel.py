@@ -184,7 +184,7 @@ class Trainer(object):
                 self.optimizer.zero_grad()
                 e2e_loss, ind_loss, ldiv_loss, udiv_loss, con_loss = self._train_single_batch(self.model, x1, x2, x3, x4, g, wfile)
                 self.loss = e2e_loss + self.config.weight_ind*ind_loss - self.config.weight_ldiv*ldiv_loss -\
-                            self.config.weight_udiv*udiv_loss + self.weight_con*con_loss
+                            self.config.weight_udiv*udiv_loss - self.weight_con*con_loss
                             
                 self.loss.backward()
                 self.optimizer.step()
