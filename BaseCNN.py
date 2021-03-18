@@ -57,7 +57,7 @@ class BaseCNN(nn.Module):
         x1 = self.backbone1.layer3(x_share)
         x1 = self.backbone1.layer4(x1)
         x1 = self.backbone1.avgpool(x1).view(x.size(0), -1)
-        #x1 = F.normalize(x1, p=2, dim=1)
+        x1 = F.normalize(x1, p=2, dim=1)
         x1 = self.backbone1.fc(x1)
         mean1 = x1[:, 0]
         #t = x1[:, 1]
@@ -68,7 +68,7 @@ class BaseCNN(nn.Module):
         x2 = self.backbone2.layer3(x_share)
         x2 = self.backbone2.layer4(x2)
         x2 = self.backbone2.avgpool(x2).view(x.size(0), -1)
-        #x2 = F.normalize(x2, p=2, dim=1)
+        x2 = F.normalize(x2, p=2, dim=1)
         x2 = self.backbone2.fc(x2)
         mean2 = x2[:, 0]
         #t = x2[:, 1]
@@ -79,7 +79,7 @@ class BaseCNN(nn.Module):
         x3 = self.backbone3.layer3(x_share)
         x3 = self.backbone3.layer4(x3)
         x3 = self.backbone3.avgpool(x3).view(x.size(0), -1)
-        #x3 = F.normalize(x3, p=2, dim=1)
+        x3 = F.normalize(x3, p=2, dim=1)
         x3 = self.backbone3.fc(x3)
         mean3 = x3[:, 0]
         #t = x3[:, 1]
@@ -90,7 +90,7 @@ class BaseCNN(nn.Module):
         x4 = self.backbone4.layer3(x_share)
         x4 = self.backbone4.layer4(x4)
         x4 = self.backbone4.avgpool(x4).view(x.size(0), -1)
-        #x4 = F.normalize(x4, p=2, dim=1)
+        x4 = F.normalize(x4, p=2, dim=1)
         x4 = self.backbone4.fc(x4)
         mean4 = x4[:, 0]
         #t = x4[:, 1]
