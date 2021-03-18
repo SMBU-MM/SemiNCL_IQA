@@ -52,10 +52,10 @@ class Ncl_loss(torch.nn.Module):
         ###############################################################
         if g==None:
             y1_pred_std = torch.std(torch.cat([item.unsqueeze(1) for item in y1], dim=1), dim=1)
-            y1_var_std = torch.sqrt(torch.mean(torch.cat([item.unsqueeze(1) for item in y1_var], dim=1), dim=1))
+            y1_var_std = torch.sqrt(torch.mean(torch.cat([item.unsqueeze(1) for item in y1_var], dim=1)/len(y2), dim=1))
 
             y2_pred_std = torch.std(torch.cat([item.unsqueeze(1) for item in y2], dim=1), dim=1)
-            y1_var_std = torch.sqrt(torch.mean(torch.cat([item.unsqueeze(1) for item in y2_var], dim=1), dim=1))
+            y2_var_std = torch.sqrt(torch.mean(torch.cat([item.unsqueeze(1) for item in y2_var], dim=1)/len(y2), dim=1))
 
             con_loss = F.margin_ranking_loss(torch.cat([y1_var_std, y2_var_std], dim=0)*3, \
                                              torch.cat([y1_pred_std, y2_pred_std], dim=0), -1)
@@ -75,16 +75,16 @@ class Ncl_loss(torch.nn.Module):
         if not g==None:
             for i in range(n):
                 if i == 0:
-                    y1_mean = y1[i].clone()
-                    y1_var_mean = y1_var[i].clone()
-                    y2_mean = y2[i].clone()
-                    y2_var_mean = y2_var[i].clone()
+                    y1_sum = y1[i].clone()
+                    y1_var_sum  = y1_var[i].clone()
+                    y2_sum  = y2[i].clone()
+                    y2_var_sum  = y2_var[i].clone()
                 else:
-                    y1_mean += y1[i].clone()
-                    y1_var_mean += y1_var[i].clone()
-                    y2_mean += y2[i].clone()
-                    y2_var_mean += y2_var[i].clone()
-            p_bar = self._pcal(y1_mean/n, y1_var_mean/n, y2_mean/n, y2_var_mean/n)
+                    y1_sum  += y1[i].clone()
+                    y1_var_sum  += y1_var[i].clone()
+                    y2_sum  += y2[i].clone()
+                    y2_var_sum  += y2_var[i].clone()
+            p_bar = self._pcal(y1_sum/n, y1_var_sum/(n*n), y2_sum/n, y2_var_sum/(n*n))
             e2e_loss = self._fid(p_bar, g)
         # return
         if g==None:
