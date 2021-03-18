@@ -165,6 +165,7 @@ class Trainer(object):
         running_ind_loss = 0 if epoch == 0 else self.train_loss[-1][2]
         running_ldiv_loss = 0 if epoch == 0 else self.train_loss[-1][3]
         running_udiv_loss = 0 if epoch == 0 else self.train_loss[-1][4]
+        running_con_loss = 0 if epoch == 0 else self.train_loss[-1][5]
 
         running_duration = 0.0
 
@@ -204,29 +205,33 @@ class Trainer(object):
                 running_udiv_loss = beta * running_udiv_loss + (1 - beta) * udiv_loss.data.item()
                 udiv_loss_corrected = running_udiv_loss / (1 - beta ** local_counter)
 
+                running_con_loss = beta * running_con_loss + (1 - beta) * con_loss.data.item()
+                con_loss_corrected = running_con_loss / (1 - beta ** local_counter)
+
                 self.loss_count += 1
                 if self.loss_count % 100 == 0:
                     self.writer.add_scalars('data/Corrected_Loss', {'loss': loss_corrected}, self.loss_count)
                     self.writer.add_scalars('data/E2E_corrected_loss', {'loss': e2e_loss_corrected}, self.loss_count)
                     self.writer.add_scalars('data/Ind_corrected_Loss', {'loss': ind_loss_corrected}, self.loss_count)
-                    self.writer.add_scalars('data/Label_diversity_loss', {'loss': running_ldiv_loss}, self.loss_count)
-                    self.writer.add_scalars('data/UnLabel_diversity_loss', {'loss': running_udiv_loss}, self.loss_count)
+                    self.writer.add_scalars('data/Label_diversity_loss', {'loss': ldiv_loss_corrected}, self.loss_count)
+                    self.writer.add_scalars('data/UnLabel_diversity_loss', {'loss': udiv_loss_corrected}, self.loss_count)
+                    self.writer.add_scalars('data/Diversity_cons_loss', {'loss': con_loss_corrected}, self.loss_count)
                 
                 current_time = time.time()
                 duration = current_time - start_time
                 running_duration = beta * running_duration + (1 - beta) * duration
                 duration_corrected = running_duration / (1 - beta ** local_counter)
                 examples_per_sec = self.config.batch_size / duration_corrected
-                format_str = ('(E:%d, S:%d / %d) [Loss = %.4f E2E Loss = %.4f, Ind Loss = %.4f, LDiv Loss = %.8f, UDiv Loss = %.08f] (%.1f samples/sec; %.3f '
+                format_str = ('(E:%d, S:%d / %d) [Loss = %.4f E2E Loss = %.4f, Ind Loss = %.4f, LDiv Loss = %.8f, UDiv Loss = %.08f Con Loss= %08f] (%.1f samples/sec; %.3f '
                             'sec/batch)')
                 print(format_str % (epoch, step, num_steps_per_epoch, loss_corrected, e2e_loss_corrected, ind_loss_corrected,
-                                    ldiv_loss_corrected, udiv_loss_corrected, examples_per_sec, duration_corrected))
+                                    ldiv_loss_corrected, udiv_loss_corrected, con_loss_corrected, examples_per_sec, duration_corrected))
 
                 local_counter += 1
                 self.start_step = 0
                 start_time = time.time()
 
-        self.train_loss.append([loss_corrected, e2e_loss_corrected, ind_loss_corrected, ldiv_loss_corrected, udiv_loss_corrected])
+        self.train_loss.append([loss_corrected, e2e_loss_corrected, ind_loss_corrected, ldiv_loss_corrected, udiv_loss_corrected, con_loss_corrected])
 
         # evaluate after every other epoch
         ret_eval = self._eval(self.model)
