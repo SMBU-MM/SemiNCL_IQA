@@ -25,7 +25,7 @@ class Ncl_loss(torch.nn.Module):
     def _pcal(self, y1, y1_var, y2, y2_var):
         y_diff = (y1 - y2)
         y_var = y1_var + y2_var 
-        p = 0.5 * (1 + torch.erf(y_diff / torch.sqrt(2 * y_var.detach())))
+        p = 0.5 * (1 + torch.erf(y_diff / torch.sqrt(2 * y_var)))
         return p
 
     def forward(self, y1, y1_var, y2, y2_var, g=None):
@@ -47,6 +47,18 @@ class Ncl_loss(torch.nn.Module):
             else:
                 div_loss += self._fid(p[i], p[j])
         div_loss = div_loss/(n*(n-1))
+        ###############################################################
+        # diversity constraint
+        ###############################################################
+        if g==None:
+            y1_pred_std = torch.std(torch.cat([item.unsqueeze(1) for item in y1], dim=1), dim=1)
+            y1_var_std = torch.sqrt(torch.mean(torch.cat([item.unsqueeze(1) for item in y1_var], dim=1), dim=1))
+
+            y2_pred_std = torch.std(torch.cat([item.unsqueeze(1) for item in y2], dim=1), dim=1)
+            y1_var_std = torch.sqrt(torch.mean(torch.cat([item.unsqueeze(1) for item in y2_var], dim=1), dim=1))
+
+            con_loss = F.margin_ranking_loss(torch.cat([y1_var_std, y2_var_std], dim=0)*3, \
+                                             torch.cat([y1_pred_std, y2_pred_std], dim=0), -1)
         ###############################################################
         # individual empirical loss
         ###############################################################
@@ -76,6 +88,6 @@ class Ncl_loss(torch.nn.Module):
             e2e_loss = self._fid(p_bar, g)
         # return
         if g==None:
-            return div_loss
+            return div_loss, con_loss
         else:
             return e2e_loss, ind_loss, div_loss

@@ -40,10 +40,10 @@ class Trainer(object):
         self.train_loader = self._loader(csv_file = os.path.join(config.trainset, 'splits2', str(config.split), config.train_txt),
                                         img_dir = config.trainset, transform = self.train_transform, batch_size = config.batch_size)                                    
         # testing set configuration
-        self.kadid10k_loader = self._loader(csv_file = os.path.join(config.kadid10k_set, 'splits2', str(config.split), 'kadid10k_test.txt'),
+        self.kadid10k_loader = self._loader(csv_file = os.path.join(config.kadid10k_set, 'splits2', str(config.split), 'kadid10k_test_10125.txt'),
                                         img_dir = config.kadid10k_set, transform = self.test_transform, test = True, shuffle = False, 
                                         pin_memory = True, num_workers = 0)
-        self.livec_loader = self._loader(csv_file = os.path.join(config.livec_set, 'livec_test.txt'),
+        self.livec_loader = self._loader(csv_file = os.path.join(config.livec_set, 'splits2', str(config.split), 'clive_test.txt'),
                                         img_dir = config.livec_set, transform = self.test_transform, test = True, shuffle = False, 
                                         pin_memory = True, num_workers = 0)
         self.spaq_loader = self._loader(csv_file = os.path.join(config.spaq_set, 'spaq_test.txt'),
@@ -68,7 +68,7 @@ class Trainer(object):
             lr = self.initial_lr
 
         self.optimizer = torch.optim.Adam([
-            {'params': self.model.parameters(), 'lr': lr},
+            {'params': self.model.parameters()}
             ], lr=lr, weight_decay=5e-4)
 
         # some states
@@ -116,14 +116,16 @@ class Trainer(object):
         y21, y21_var, y22, y22_var, y23, y23_var, y24, y24_var = model(x2)
         e2e_loss, ind_loss, ldiv_loss = self.ncl_fn([y11, y12, y13, y14], [y11_var, y12_var, y13_var, y14_var],\
                                                     [y21, y22, y23, y24], [y21_var, y22_var, y23_var, y24_var], g)
+
         y31, y31_var, y32, y32_var, y33, y33_var, y34, y34_var = model(x3)
         y41, y41_var, y42, y42_var, y43, y43_var, y44, y44_var = model(x4)
-        udiv_loss = self.ncl_fn([y31, y32, y33, y34], [y31_var, y32_var, y33_var, y34_var],\
+
+        udiv_loss, con_loss = self.ncl_fn([y31, y32, y33, y34], [y31_var, y32_var, y33_var, y34_var],\
                                 [y41, y42, y43, y44], [y41_var, y42_var, y43_var, y44_var])
         if not wfile == None:
             self._save_quality(wfile, y11, y12, y13, y14, y21, y22, y23, y24, \
                                       y31, y32, y33, y34, y41, y42, y43, y44)
-        return e2e_loss, ind_loss, ldiv_loss, udiv_loss
+        return e2e_loss, ind_loss, ldiv_loss, udiv_loss, con_loss
 
     def _save_quality(self, wfile, x1, x2, x3, x4, y1, y2, y3, y4, xu1, xu2, xu3, xu4, yu1, yu2, yu3, yu4):
         x1 = x1.clone().view(-1).detach().cpu().numpy().tolist()
@@ -179,9 +181,10 @@ class Trainer(object):
                                     Variable(sample_batched['y']).view(-1,1).cuda()
 
                 self.optimizer.zero_grad()
-                e2e_loss, ind_loss, ldiv_loss, udiv_loss = self._train_single_batch(self.model, x1, x2, x3, x4, g, wfile)
+                e2e_loss, ind_loss, ldiv_loss, udiv_loss, con_loss = self._train_single_batch(self.model, x1, x2, x3, x4, g, wfile)
                 self.loss = e2e_loss + self.config.weight_ind*ind_loss - self.config.weight_ldiv*ldiv_loss -\
-                            self.config.weight_udiv*udiv_loss
+                            self.config.weight_udiv*udiv_loss + self.weight_con*con_loss
+                            
                 self.loss.backward()
                 self.optimizer.step()
 
@@ -204,7 +207,10 @@ class Trainer(object):
                 self.loss_count += 1
                 if self.loss_count % 100 == 0:
                     self.writer.add_scalars('data/Corrected_Loss', {'loss': loss_corrected}, self.loss_count)
-                    self.writer.add_scalars('data/Uncorrected_Loss', {'loss': self.loss.data.item()}, self.loss_count)
+                    self.writer.add_scalars('data/E2E_corrected_loss', {'loss': e2e_loss_corrected}, self.loss_count)
+                    self.writer.add_scalars('data/Ind_corrected_Loss', {'loss': ind_loss_corrected}, self.loss_count)
+                    self.writer.add_scalars('data/Label_diversity_loss', {'loss': running_ldiv_loss}, self.loss_count)
+                    self.writer.add_scalars('data/UnLabel_diversity_loss', {'loss': running_udiv_loss}, self.loss_count)
                 
                 current_time = time.time()
                 duration = current_time - start_time
