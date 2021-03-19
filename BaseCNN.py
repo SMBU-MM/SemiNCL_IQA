@@ -96,6 +96,6 @@ class BaseCNN(nn.Module):
         #t = x4[:, 1]
         #var4 = nn.functional.softplus(t)**2
         var4 = torch.ones_like(mean4)**2
-        return mean1, var1, mean2, var2, mean3, var3, mean4, var4
+        return [mean1, mean2, mean3, mean4], [var1, var2, var3, var4]
    
 

@@ -112,43 +112,23 @@ class Trainer(object):
             self.scheduler.step()
 
     def _train_single_batch(self, model, x1, x2, x3, x4, g=None, wfile=None):
-        y11, y11_var, y12, y12_var, y13, y13_var, y14, y14_var = model(x1)
-        y21, y21_var, y22, y22_var, y23, y23_var, y24, y24_var = model(x2)
-        e2e_loss, ind_loss, ldiv_loss = self.ncl_fn([y11, y12, y13, y14], [y11_var, y12_var, y13_var, y14_var],\
-                                                    [y21, y22, y23, y24], [y21_var, y22_var, y23_var, y24_var], g)
+        y1, y1_var = model(x1)
+        y2, y2_var= model(x2)
+        e2e_loss, ind_loss, _, ldiv_loss = self.ncl_fn(y1, y1_var,y2, y2_var, g)
 
-        y31, y31_var, y32, y32_var, y33, y33_var, y34, y34_var = model(x3)
-        y41, y41_var, y42, y42_var, y43, y43_var, y44, y44_var = model(x4)
-
-        udiv_loss, con_loss = self.ncl_fn([y31, y32, y33, y34], [y31_var, y32_var, y33_var, y34_var],\
-                                [y41, y42, y43, y44], [y41_var, y42_var, y43_var, y44_var])
+        y3, y3_var= model(x3)
+        y4, y4_var = model(x4)
+        _, udiv_loss = self.ncl_fn(y3, y3_var, y4, y4_var)
         if not wfile == None:
-            self._save_quality(wfile, y11, y12, y13, y14, y21, y22, y23, y24, \
-                                      y31, y32, y33, y34, y41, y42, y43, y44)
-        return e2e_loss, ind_loss, ldiv_loss, udiv_loss, con_loss
+            self._save_quality(wfile, y1, y2, y3, y4)
+        return e2e_loss, ind_loss, ldiv_loss, udiv_loss
 
-    def _save_quality(self, wfile, x1, x2, x3, x4, y1, y2, y3, y4, xu1, xu2, xu3, xu4, yu1, yu2, yu3, yu4):
-        x1 = x1.clone().view(-1).detach().cpu().numpy().tolist()
-        x2 = x2.clone().view(-1).detach().cpu().numpy().tolist()
-        x3 = x3.clone().view(-1).detach().cpu().numpy().tolist()
-        x4 = x4.clone().view(-1).detach().cpu().numpy().tolist()
-        y1 = y1.clone().view(-1).detach().cpu().numpy().tolist()
-        y2 = y2.clone().view(-1).detach().cpu().numpy().tolist()
-        y3 = y3.clone().view(-1).detach().cpu().numpy().tolist()
-        y4 = y4.clone().view(-1).detach().cpu().numpy().tolist()
-        xu1 = xu1.clone().view(-1).detach().cpu().numpy().tolist()
-        xu2 = xu2.clone().view(-1).detach().cpu().numpy().tolist()
-        xu3 = xu3.clone().view(-1).detach().cpu().numpy().tolist()
-        xu4 = xu4.clone().view(-1).detach().cpu().numpy().tolist()
-        yu1 = yu1.clone().view(-1).detach().cpu().numpy().tolist()
-        yu2 = yu2.clone().view(-1).detach().cpu().numpy().tolist()
-        yu3 = yu3.clone().view(-1).detach().cpu().numpy().tolist()
-        yu4 = yu4.clone().view(-1).detach().cpu().numpy().tolist()
-        for i in range(len(x1)):
-            wstr = "[%.04f,%.04f,%.04f,%.04f] "% (x1[i], x2[i], x3[i], x4[i]) + \
-                   "[%.04f,%.04f,%.04f,%.04f] "% (y1[i], y2[i], y3[i], y4[i]) + \
-                   "[%.04f,%.04f,%.04f,%.04f] "% (xu1[i], xu2[i], xu3[i], xu4[i]) + \
-                   "[%.04f,%.04f,%.04f,%.04f] \n"% (yu1[i], yu2[i], yu3[i], yu4[i])
+    def _save_quality(self, wfile, y1, y2, y3, y4):
+        y = []
+        for item in y1+y2+y3+y4:
+            y.append(item.clone().view(-1).detach().cpu().numpy().tolist())
+        for i in range(len(y[0])):
+            wstr = "[%.04f,%.04f,%.04f,%.04f] [%.04f,%.04f,%.04f,%.04f] [%.04f,%.04f,%.04f,%.04f] [%.04f,%.04f,%.04f,%.04f] \n" % (item[i] for item in y)
             wfile.write(wstr)
 
     def _train_single_epoch(self, epoch):
@@ -165,7 +145,6 @@ class Trainer(object):
         running_ind_loss = 0 if epoch == 0 else self.train_loss[-1][2]
         running_ldiv_loss = 0 if epoch == 0 else self.train_loss[-1][3]
         running_udiv_loss = 0 if epoch == 0 else self.train_loss[-1][4]
-        running_con_loss = 0 if epoch == 0 else self.train_loss[-1][5]
 
         running_duration = 0.0
 
@@ -182,9 +161,8 @@ class Trainer(object):
                                     Variable(sample_batched['y']).view(-1,1).cuda()
 
                 self.optimizer.zero_grad()
-                e2e_loss, ind_loss, ldiv_loss, udiv_loss, con_loss = self._train_single_batch(self.model, x1, x2, x3, x4, g, wfile)
-                self.loss = e2e_loss + self.config.weight_ind*ind_loss - self.config.weight_ldiv*ldiv_loss -\
-                            self.config.weight_udiv*udiv_loss - self.weight_con*con_loss
+                e2e_loss, ind_loss, ldiv_loss, udiv_loss = self._train_single_batch(self.model, x1, x2, x3, x4, g, wfile)
+                self.loss = e2e_loss + self.config.weight_ind*ind_loss - self.config.weight_ldiv*ldiv_loss -self.config.weight_udiv*udiv_loss 
                             
                 self.loss.backward()
                 self.optimizer.step()
@@ -205,9 +183,6 @@ class Trainer(object):
                 running_udiv_loss = beta * running_udiv_loss + (1 - beta) * udiv_loss.data.item()
                 udiv_loss_corrected = running_udiv_loss / (1 - beta ** local_counter)
 
-                running_con_loss = beta * running_con_loss + (1 - beta) * con_loss.data.item()
-                con_loss_corrected = running_con_loss / (1 - beta ** local_counter)
-
                 self.loss_count += 1
                 if self.loss_count % 100 == 0:
                     self.writer.add_scalars('data/Corrected_Loss', {'loss': loss_corrected}, self.loss_count)
@@ -215,23 +190,22 @@ class Trainer(object):
                     self.writer.add_scalars('data/Ind_corrected_Loss', {'loss': ind_loss_corrected}, self.loss_count)
                     self.writer.add_scalars('data/Label_diversity_loss', {'loss': ldiv_loss_corrected}, self.loss_count)
                     self.writer.add_scalars('data/UnLabel_diversity_loss', {'loss': udiv_loss_corrected}, self.loss_count)
-                    self.writer.add_scalars('data/Diversity_cons_loss', {'loss': con_loss_corrected}, self.loss_count)
                 
                 current_time = time.time()
                 duration = current_time - start_time
                 running_duration = beta * running_duration + (1 - beta) * duration
                 duration_corrected = running_duration / (1 - beta ** local_counter)
                 examples_per_sec = self.config.batch_size / duration_corrected
-                format_str = ('(E:%d, S:%d / %d) [Loss = %.4f E2E Loss = %.4f, Ind Loss = %.4f, LDiv Loss = %.8f, UDiv Loss = %.08f Con Loss= %08f] (%.1f samples/sec; %.3f '
+                format_str = ('(E:%d, S:%d / %d) [Loss = %.4f E2E Loss = %.4f, Ind Loss = %.4f, LDiv Loss = %.8f, UDiv Loss = %.08f] (%.1f samples/sec; %.3f '
                             'sec/batch)')
                 print(format_str % (epoch, step, num_steps_per_epoch, loss_corrected, e2e_loss_corrected, ind_loss_corrected,
-                                    ldiv_loss_corrected, udiv_loss_corrected, con_loss_corrected, examples_per_sec, duration_corrected))
+                                    ldiv_loss_corrected, udiv_loss_corrected, examples_per_sec, duration_corrected))
 
                 local_counter += 1
                 self.start_step = 0
                 start_time = time.time()
 
-        self.train_loss.append([loss_corrected, e2e_loss_corrected, ind_loss_corrected, ldiv_loss_corrected, udiv_loss_corrected, con_loss_corrected])
+        self.train_loss.append([loss_corrected, e2e_loss_corrected, ind_loss_corrected, ldiv_loss_corrected, udiv_loss_corrected])
 
         # evaluate after every other epoch
         ret_eval = self._eval(self.model)
@@ -295,12 +269,12 @@ class Trainer(object):
         q_hat1, q_hat2, q_hat3, q_hat4 = [], [], [], []
         for step, sample_batched in enumerate(loader, 0):
             x, y = Variable(sample_batched['I']).cuda(), sample_batched['mos']
-            y_bar1, _, y_bar2, _, y_bar3, _, y_bar4, _ = model(x)
+            y_bar, _ = model(x)
             q_mos.append(y.data.numpy())
-            q_hat1.append(y_bar1.cpu().data.numpy())
-            q_hat2.append(y_bar2.cpu().data.numpy())
-            q_hat3.append(y_bar3.cpu().data.numpy())
-            q_hat4.append(y_bar4.cpu().data.numpy())
+            q_hat1.append(y_bar[0].cpu().data.numpy())
+            q_hat2.append(y_bar[1].cpu().data.numpy())
+            q_hat3.append(y_bar[2].cpu().data.numpy())
+            q_hat4.append(y_bar[3].cpu().data.numpy())
 
         srcc1 = scipy.stats.mstats.spearmanr(x=q_mos, y=q_hat1)[0]
         plcc1 = scipy.stats.mstats.pearsonr(x=q_mos, y=q_hat1)[0]

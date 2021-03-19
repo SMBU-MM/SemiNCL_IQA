@@ -16,7 +16,7 @@ def parse_config():
     parser.add_argument("--weight_ind", type=float, default=1.0)
     parser.add_argument("--weight_ldiv", type=float, default=0.25)
     parser.add_argument("--weight_udiv", type=float, default=0.025)
-    parser.add_argument("--weight_con", type=float, default=0.1)
+    parser.add_argument("--weight_con", type=float, default=0.001)
 
     parser.add_argument("--margin", type=float, default=0.025)
 
