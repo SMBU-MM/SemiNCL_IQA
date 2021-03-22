@@ -99,6 +99,8 @@ class BaseCNN(nn.Module):
         #x3 = F.normalize(x3, p=2, dim=1)
         x3 = self.backbone3.fc(x3)
         x3 = self.backbone3.fcbn(x3)
+        x3 = self.share_fc(x3)
+
         mean3 = x3[:, 0]
         #t = x3[:, 1]
         #var3 = nn.functional.softplus(t)**2
