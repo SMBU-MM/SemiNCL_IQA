@@ -3,7 +3,7 @@ import TrainModel
 import os
 from shutil import copyfile
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '7'
+os.environ['CUDA_VISIBLE_DEVICES'] = '5'
 
 def parse_config():
     parser = argparse.ArgumentParser()
@@ -27,7 +27,7 @@ def parse_config():
     parser.add_argument("--koniq10k_set", type=str, default="../IQA_database/koniq-10k/")
     parser.add_argument("--kadid10k_set", type=str, default="../IQA_database/kadid10k/")
 
-    checkpoint_path = r"./checkpoint_weight_decay_5e-4_decay_interval_1_ldiv0.25_udiv0.040/"
+    checkpoint_path = r"./checkpoint_head8/"
     parser.add_argument('--ckpt', default=checkpoint_path, type=str, help='name of the checkpoint to load')
     
     parser.add_argument("--train_txt", type=str, default='train_unlabeled.txt') # train.txt | train_synthetic.txt | train_authentic.txt | train_sub2.txt | train_score.txt
@@ -76,7 +76,7 @@ if __name__ == "__main__":
     copyfile('Transformers.py', os.path.join(config.codes, 'Transformers.py'))
     copyfile('MNL_Loss.py', os.path.join(config.codes, 'MNL_Loss.py'))
     # stage1: freezing previous layers, training fc
-    main(config)
+    # main(config)
     # stage2: fine-tuning the whole network
     config.fz = False
     config.resume = True  # resuming from the latest checkpoint of stage 1

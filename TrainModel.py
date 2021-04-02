@@ -10,7 +10,7 @@ from torchvision import transforms
 import torch.nn as nn
 from ImageDataset import ImageDataset
 from BaseCNN import BaseCNN
-from MNL_Loss import Fidelity_Loss, Ncl_loss
+from MNL_Loss import Ncl_loss
 from Transformers import AdaptiveResize
 from tensorboardX import SummaryWriter
 import prettytable as pt
@@ -58,7 +58,6 @@ class Trainer(object):
         self.model_name = type(self.model).__name__
         print(self.model)
         # loss function
-        self.loss_fn = Fidelity_Loss().cuda()
         self.ncl_fn = Ncl_loss().cuda()
 
         self.initial_lr = config.lr
@@ -107,18 +106,37 @@ class Trainer(object):
         return train_loader
 
     def fit(self):
+        # evaluate after every other epoch
+        srcc, plcc, n = self._eval(self.model) # n is the number of heads
+        tb = pt.PrettyTable()
+        tb.field_names = ["Model1", "KADID10K", "LIVEC", "SPAQ", "KONIQ10K"]
+        tb.add_row(['SRCC', srcc["kadid10k"]['model{}'.format(0)], srcc["livec"]['model{}'.format(0)], srcc["spaq"]['model{}'.format(0)], srcc["koniq10k"]['model{}'.format(0)]])
+        tb.add_row(['PLCC', plcc["kadid10k"]['model{}'.format(0)], plcc["livec"]['model{}'.format(0)], plcc["spaq"]['model{}'.format(0)], plcc["koniq10k"]['model{}'.format(0)]])
+        for i in range(n-1): # do not include head1 and ensemble
+            tb.add_row(["Model{}".format(i+2), "KADID10K", "LIVEC", "SPAQ", "KONIQ10K"])
+            tb.add_row(['SRCC', srcc["kadid10k"]['model{}'.format(i+1)], srcc["livec"]['model{}'.format(i+1)], srcc["spaq"]['model{}'.format(i+1)], srcc["koniq10k"]['model{}'.format(i+1)]])
+            tb.add_row(['PLCC', plcc["kadid10k"]['model{}'.format(i+1)], plcc["livec"]['model{}'.format(i+1)], plcc["spaq"]['model{}'.format(i+1)], plcc["koniq10k"]['model{}'.format(i+1)]])
+        tb.add_row(["Ensemble", "KADID10K", "LIVEC", "SPAQ", "KONIQ10K"])
+        tb.add_row(['SRCC', srcc["kadid10k"]['ensemble'], srcc["livec"]['ensemble'], srcc["spaq"]['ensemble'], srcc["koniq10k"]['ensemble']])
+        tb.add_row(['PLCC', plcc["kadid10k"]['ensemble'], plcc["livec"]['ensemble'], plcc["spaq"]['ensemble'], plcc["koniq10k"]['ensemble']])
+        print(tb)
+
+        f = open(os.path.join(self.config.result_path, r'Baseline.txt'), 'w')
+        f.write(str(tb))
+        f.close()
+
         for epoch in range(self.start_epoch, self.max_epochs):
             _ = self._train_single_epoch(epoch)
             self.scheduler.step()
 
     def _train_single_batch(self, model, x1, x2, x3, x4, g=None, wfile=None):
-        y1, y1_var = model(x1)
-        y2, y2_var= model(x2)
-        e2e_loss, ind_loss, _, ldiv_loss = self.ncl_fn(y1, y1_var,y2, y2_var, g)
+        y1, y1_var, _, _ = model(x1)
+        y2, y2_var, _, _ = model(x2)
+        e2e_loss, ind_loss, ldiv_loss = self.ncl_fn(y1, y1_var,y2, y2_var, g)
 
-        y3, y3_var= model(x3)
-        y4, y4_var = model(x4)
-        _, udiv_loss = self.ncl_fn(y3, y3_var, y4, y4_var)
+        y3, y3_var, _, _ = model(x3)
+        y4, y4_var, _, _ = model(x4)
+        udiv_loss = self.ncl_fn(y3, y3_var, y4, y4_var)
         if not wfile == None:
             self._save_quality(wfile, y1, y2, y3, y4)
         return e2e_loss, ind_loss, ldiv_loss, udiv_loss
@@ -127,8 +145,15 @@ class Trainer(object):
         y = []
         for item in y1+y2+y3+y4:
             y.append(item.clone().view(-1).detach().cpu().numpy().tolist())
+        n = len(y)
         for i in range(len(y[0])):
-            wstr = "[%.04f,%.04f,%.04f,%.04f] [%.04f,%.04f,%.04f,%.04f] [%.04f,%.04f,%.04f,%.04f] [%.04f,%.04f,%.04f,%.04f] \n" % (item[i] for item in y)
+            wstr = ""
+            for j in range(len(y)):
+                wstr += "%.04f" % y[j][i]
+                if j == len(y)-1:
+                    wstr += '\n'
+                else:
+                    wstr += ','
             wfile.write(wstr)
 
     def _train_single_epoch(self, epoch):
@@ -162,8 +187,7 @@ class Trainer(object):
 
                 self.optimizer.zero_grad()
                 e2e_loss, ind_loss, ldiv_loss, udiv_loss = self._train_single_batch(self.model, x1, x2, x3, x4, g, wfile)
-                self.loss = e2e_loss + self.config.weight_ind*ind_loss - self.config.weight_ldiv*ldiv_loss -self.config.weight_udiv*udiv_loss 
-                            
+                self.loss = e2e_loss + self.config.weight_ind*ind_loss - self.config.weight_ldiv*ldiv_loss - self.config.weight_udiv*udiv_loss 
                 self.loss.backward()
                 self.optimizer.step()
 
@@ -207,52 +231,6 @@ class Trainer(object):
 
         self.train_loss.append([loss_corrected, e2e_loss_corrected, ind_loss_corrected, ldiv_loss_corrected, udiv_loss_corrected])
 
-        # evaluate after every other epoch
-        ret_eval = self._eval(self.model)
-        ret_kadd = ret_eval['kadid10k']
-        ret_live = ret_eval['livec']
-        ret_spaq = ret_eval['spaq']
-        ret_konk = ret_eval['koniq10k']
-        # calculate ensemble
-        # kadid
-        ensemble = ret_kadd["model1"][3] + ret_kadd["model2"][3] + ret_kadd["model3"][3] + ret_kadd["model1"][3]
-        skadid = scipy.stats.mstats.spearmanr(x=ret_kadd["model1"][2], y= ensemble)[0]
-        pkadid = scipy.stats.mstats.pearsonr(x=ret_kadd["model1"][2], y= ensemble)[0]
-        
-        ensemble = ret_live["model1"][3] + ret_live["model2"][3] + ret_live["model3"][3] + ret_live["model1"][3]
-        slivec = scipy.stats.mstats.spearmanr(x=ret_live["model1"][2], y= ensemble)[0]
-        plivec = scipy.stats.mstats.pearsonr(x=ret_live["model1"][2], y= ensemble)[0]
-        
-        ensemble = ret_spaq["model1"][3] + ret_spaq["model2"][3] + ret_spaq["model3"][3] + ret_spaq["model1"][3]
-        sspaq = scipy.stats.mstats.spearmanr(x=ret_spaq["model1"][2], y= ensemble)[0]
-        pspaq = scipy.stats.mstats.pearsonr(x=ret_spaq["model1"][2], y= ensemble)[0]
-        
-        ensemble = ret_konk["model1"][3] + ret_konk["model2"][3] + ret_konk["model3"][3] + ret_konk["model1"][3]
-        skoniq = scipy.stats.mstats.spearmanr(x=ret_konk["model1"][2], y= ensemble)[0]
-        pkoniq = scipy.stats.mstats.pearsonr(x=ret_konk["model1"][2], y= ensemble)[0]
-
-        tb = pt.PrettyTable()
-        tb.field_names = ["Model1", "KADID10K", "LIVEC", "SPAQ", "KONIQ10K"]
-        tb.add_row(['SRCC', ret_kadd["model1"][0], ret_live["model1"][0], ret_spaq["model1"][0], ret_konk["model1"][0]])
-        tb.add_row(['PLCC', ret_kadd["model1"][1], ret_live["model1"][1], ret_spaq["model1"][1], ret_konk["model1"][1]])
-        tb.add_row(["Model2", "KADID10K", "LIVEC", "SPAQ", "KONIQ10K"])
-        tb.add_row(['SRCC', ret_kadd["model2"][0], ret_live["model2"][0], ret_spaq["model2"][0], ret_konk["model2"][0]])
-        tb.add_row(['PLCC', ret_kadd["model2"][1], ret_live["model2"][1], ret_spaq["model2"][1], ret_konk["model2"][1]])
-        tb.add_row(["Model3", "KADID10K", "LIVEC", "SPAQ", "KONIQ10K"])
-        tb.add_row(['SRCC', ret_kadd["model3"][0], ret_live["model3"][0], ret_spaq["model3"][0], ret_konk["model3"][0]])
-        tb.add_row(['PLCC', ret_kadd["model3"][1], ret_live["model3"][1], ret_spaq["model3"][1], ret_konk["model3"][1]])
-        tb.add_row(["Model4", "KADID10K", "LIVEC", "SPAQ", "KONIQ10K"])
-        tb.add_row(['SRCC', ret_kadd["model4"][0], ret_live["model4"][0], ret_spaq["model4"][0], ret_konk["model4"][0]])
-        tb.add_row(['PLCC', ret_kadd["model4"][1], ret_live["model4"][1], ret_spaq["model4"][1], ret_konk["model4"][1]])
-        tb.add_row(["Ensemble", "KADID10K", "LIVEC", "SPAQ", "KONIQ10K"])
-        tb.add_row(['SRCC', skadid, slivec, sspaq, skoniq])
-        tb.add_row(['PLCC', pkadid, plivec, pspaq, pkoniq])
-
-        print(tb)
-        f = open(os.path.join(self.config.result_path, r'results_{}.txt'.format(epoch)), 'w')
-        f.write(str(tb))
-        f.close()
-
         if (epoch+1) % self.epochs_per_save == 0:
             model_name = '{}-{:0>5d}.pt'.format(self.model_name, epoch)
             model_name = os.path.join(self.ckpt_path, model_name)
@@ -262,41 +240,62 @@ class Trainer(object):
                 'optimizer': self.optimizer.state_dict(),
                 'train_loss': self.train_loss,
             }, model_name)
+
+        # evaluate after every epoch
+        srcc, plcc, n = self._eval(self.model) # n is the number of heads
+        tb = pt.PrettyTable()
+        tb.field_names = ["Model1", "KADID10K", "LIVEC", "SPAQ", "KONIQ10K"]
+        tb.add_row(['SRCC', srcc["kadid10k"]['model{}'.format(0)], srcc["livec"]['model{}'.format(0)], srcc["spaq"]['model{}'.format(0)], srcc["koniq10k"]['model{}'.format(0)]])
+        tb.add_row(['PLCC', plcc["kadid10k"]['model{}'.format(0)], plcc["livec"]['model{}'.format(0)], plcc["spaq"]['model{}'.format(0)], plcc["koniq10k"]['model{}'.format(0)]])
+        
+        for i in range(n-1): # do not include head1 and ensemble
+            tb.add_row(["Model{}".format(i+2), "KADID10K", "LIVEC", "SPAQ", "KONIQ10K"])
+            tb.add_row(['SRCC', srcc["kadid10k"]['model{}'.format(i+1)], srcc["livec"]['model{}'.format(i+1)], srcc["spaq"]['model{}'.format(i+1)], srcc["koniq10k"]['model{}'.format(i+1)]])
+            tb.add_row(['PLCC', plcc["kadid10k"]['model{}'.format(i+1)], plcc["livec"]['model{}'.format(i+1)], plcc["spaq"]['model{}'.format(i+1)], plcc["koniq10k"]['model{}'.format(i+1)]])
+
+        tb.add_row(["Ensemble", "KADID10K", "LIVEC", "SPAQ", "KONIQ10K"])
+        tb.add_row(['SRCC', srcc["kadid10k"]['ensemble'], srcc["livec"]['ensemble'], srcc["spaq"]['ensemble'], srcc["koniq10k"]['ensemble']])
+        tb.add_row(['PLCC', plcc["kadid10k"]['ensemble'], plcc["livec"]['ensemble'], plcc["spaq"]['ensemble'], plcc["koniq10k"]['ensemble']])
+        print(tb)
+
+        f = open(os.path.join(self.config.result_path, r'results_{}.txt'.format(epoch)), 'w')
+        f.write(str(tb))
+        f.close()
+
         return self.loss.data.item()
 
     def _eval_single(self, model, loader):
-        q_mos = []
-        q_hat1, q_hat2, q_hat3, q_hat4 = [], [], [], []
+        srcc, plcc = {}, {}
+        q_mos, q_ens = [], []
         for step, sample_batched in enumerate(loader, 0):
             x, y = Variable(sample_batched['I']).cuda(), sample_batched['mos']
-            y_bar, _ = model(x)
+            y_bar, _, y_ens, _ = model(x)
             q_mos.append(y.data.numpy())
-            q_hat1.append(y_bar[0].cpu().data.numpy())
-            q_hat2.append(y_bar[1].cpu().data.numpy())
-            q_hat3.append(y_bar[2].cpu().data.numpy())
-            q_hat4.append(y_bar[3].cpu().data.numpy())
+            q_ens.append(y_ens.cpu().data.numpy())
+            if step == 0:
+                # claim a list
+                q_hat = [[] for i in range(len(y_bar))] 
+                
+            for i in range(len(y_bar)):
+                q_hat[i].append(y_bar[i].cpu().data.numpy())
 
-        srcc1 = scipy.stats.mstats.spearmanr(x=q_mos, y=q_hat1)[0]
-        plcc1 = scipy.stats.mstats.pearsonr(x=q_mos, y=q_hat1)[0]
-        srcc2 = scipy.stats.mstats.spearmanr(x=q_mos, y=q_hat2)[0]
-        plcc2 = scipy.stats.mstats.pearsonr(x=q_mos, y=q_hat2)[0]
-        srcc3 = scipy.stats.mstats.spearmanr(x=q_mos, y=q_hat3)[0]
-        plcc3 = scipy.stats.mstats.pearsonr(x=q_mos, y=q_hat3)[0]
-        srcc4 = scipy.stats.mstats.spearmanr(x=q_mos, y=q_hat4)[0]
-        plcc4 = scipy.stats.mstats.pearsonr(x=q_mos, y=q_hat4)[0]
-        return {"model1": [srcc1, plcc1, np.array(q_mos), np.array(q_hat1)],
-                "model2": [srcc2, plcc2, np.array(q_mos), np.array(q_hat2)],
-                "model3": [srcc3, plcc3, np.array(q_mos), np.array(q_hat3)],
-                "model4": [srcc4, plcc4, np.array(q_mos), np.array(q_hat4)]}
+        for i in range(len(q_hat)):
+            srcc['model{}'.format(i)] = scipy.stats.mstats.spearmanr(x=q_mos, y=q_hat[i])[0]
+            plcc['model{}'.format(i)] = scipy.stats.mstats.pearsonr(x=q_mos, y=q_hat[i])[0]
+
+        srcc['ensemble'] = scipy.stats.mstats.spearmanr(x=q_mos, y=q_ens)[0]
+        plcc['ensemble'] = scipy.stats.mstats.pearsonr(x=q_mos, y=q_ens)[0]
+
+        return srcc, plcc, len(q_hat)
 
     def _eval(self, model):
-        sp = {}
+        srcc, plcc = {}, {}
         model.eval()
-        sp['kadid10k'] = self._eval_single(model, self.kadid10k_loader)
-        sp['livec'] = self._eval_single(model, self.livec_loader)
-        sp['spaq'] = self._eval_single(model, self.spaq_loader)
-        sp['koniq10k'] = self._eval_single(model, self.koniq10k_loader)
-        return sp
+        srcc['kadid10k'], plcc['kadid10k'], _ = self._eval_single(model, self.kadid10k_loader)
+        srcc['livec'], plcc['livec'], _ = self._eval_single(model, self.livec_loader)
+        srcc['spaq'], plcc['spaq'], _ = self._eval_single(model, self.spaq_loader)
+        srcc['koniq10k'], plcc['koniq10k'], n = self._eval_single(model, self.koniq10k_loader)
+        return srcc, plcc, n
 
     def _load_checkpoint(self, ckpt):
         if os.path.isfile(ckpt):
