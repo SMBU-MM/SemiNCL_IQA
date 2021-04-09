@@ -38,21 +38,9 @@ class Trainer(object):
 
         # training set configuration
         self.train_loader = self._loader(csv_file = os.path.join(config.trainset, 'splits2', str(config.split), config.train_txt),
-                                        img_dir = config.trainset, transform = self.train_transform, batch_size = config.batch_size)                                    
+                                        img_dir = config.trainset, transform = self.train_transform, batch_size = config.batch_size)   
+        self.val_value = 0.0                                 
         # testing set configuration
-        self.kadid10k_loader = self._loader(csv_file = os.path.join(config.kadid10k_set, 'splits2', str(config.split), 'kadid10k_test_10125.txt'),
-                                        img_dir = config.kadid10k_set, transform = self.test_transform, test = True, shuffle = False, 
-                                        pin_memory = True, num_workers = 0)
-        self.livec_loader = self._loader(csv_file = os.path.join(config.livec_set, 'splits2', str(config.split), 'clive_test.txt'),
-                                        img_dir = config.livec_set, transform = self.test_transform, test = True, shuffle = False, 
-                                        pin_memory = True, num_workers = 0)
-        self.spaq_loader = self._loader(csv_file = os.path.join(config.spaq_set, 'spaq_test.txt'),
-                                        img_dir = config.spaq_set, transform = self.test_transform, test = True, shuffle = False, 
-                                        pin_memory = True, num_workers = 8)
-        self.koniq10k_loader = self._loader(csv_file = os.path.join(config.koniq10k_set, 'splits2', str(config.split), 'koniq10k_test.txt'),
-                                        img_dir = config.koniq10k_set, transform = self.test_transform, test = True, shuffle = False, 
-                                        pin_memory = True, num_workers = 0)
-
         self.writer = SummaryWriter(config.runs_path)
         self.model = nn.DataParallel(BaseCNN(config).cuda())
         self.model_name = type(self.model).__name__
@@ -75,6 +63,7 @@ class Trainer(object):
         self.start_step = 0
         self.train_loss = []
         self.ckpt_path = config.ckpt_path
+        self.ckpt_best_path = config.ckpt_best_path
         self.max_epochs = config.max_epochs
         self.epochs_per_eval = config.epochs_per_eval
         self.epochs_per_save = config.epochs_per_save
@@ -107,23 +96,23 @@ class Trainer(object):
 
     def fit(self):
         # evaluate after every other epoch
-        srcc, plcc, n = self._eval(self.model) # n is the number of heads
-        tb = pt.PrettyTable()
-        tb.field_names = ["Model1", "KADID10K", "LIVEC", "SPAQ", "KONIQ10K"]
-        tb.add_row(['SRCC', srcc["kadid10k"]['model{}'.format(0)], srcc["livec"]['model{}'.format(0)], srcc["spaq"]['model{}'.format(0)], srcc["koniq10k"]['model{}'.format(0)]])
-        tb.add_row(['PLCC', plcc["kadid10k"]['model{}'.format(0)], plcc["livec"]['model{}'.format(0)], plcc["spaq"]['model{}'.format(0)], plcc["koniq10k"]['model{}'.format(0)]])
-        for i in range(n-1): # do not include head1 and ensemble
-            tb.add_row(["Model{}".format(i+2), "KADID10K", "LIVEC", "SPAQ", "KONIQ10K"])
-            tb.add_row(['SRCC', srcc["kadid10k"]['model{}'.format(i+1)], srcc["livec"]['model{}'.format(i+1)], srcc["spaq"]['model{}'.format(i+1)], srcc["koniq10k"]['model{}'.format(i+1)]])
-            tb.add_row(['PLCC', plcc["kadid10k"]['model{}'.format(i+1)], plcc["livec"]['model{}'.format(i+1)], plcc["spaq"]['model{}'.format(i+1)], plcc["koniq10k"]['model{}'.format(i+1)]])
-        tb.add_row(["Ensemble", "KADID10K", "LIVEC", "SPAQ", "KONIQ10K"])
-        tb.add_row(['SRCC', srcc["kadid10k"]['ensemble'], srcc["livec"]['ensemble'], srcc["spaq"]['ensemble'], srcc["koniq10k"]['ensemble']])
-        tb.add_row(['PLCC', plcc["kadid10k"]['ensemble'], plcc["livec"]['ensemble'], plcc["spaq"]['ensemble'], plcc["koniq10k"]['ensemble']])
-        print(tb)
+        # srcc, plcc, n = self._eval(self.model) # n is the number of heads
+        # tb = pt.PrettyTable()
+        # tb.field_names = ["Model1", "KADID10K", "LIVEC", "SPAQ", "KONIQ10K"]
+        # tb.add_row(['SRCC', srcc["kadid10k"]['model{}'.format(0)], srcc["livec"]['model{}'.format(0)], srcc["spaq"]['model{}'.format(0)], srcc["koniq10k"]['model{}'.format(0)]])
+        # tb.add_row(['PLCC', plcc["kadid10k"]['model{}'.format(0)], plcc["livec"]['model{}'.format(0)], plcc["spaq"]['model{}'.format(0)], plcc["koniq10k"]['model{}'.format(0)]])
+        # for i in range(n-1): # do not include head1 and ensemble
+        #     tb.add_row(["Model{}".format(i+2), "KADID10K", "LIVEC", "SPAQ", "KONIQ10K"])
+        #     tb.add_row(['SRCC', srcc["kadid10k"]['model{}'.format(i+1)], srcc["livec"]['model{}'.format(i+1)], srcc["spaq"]['model{}'.format(i+1)], srcc["koniq10k"]['model{}'.format(i+1)]])
+        #     tb.add_row(['PLCC', plcc["kadid10k"]['model{}'.format(i+1)], plcc["livec"]['model{}'.format(i+1)], plcc["spaq"]['model{}'.format(i+1)], plcc["koniq10k"]['model{}'.format(i+1)]])
+        # tb.add_row(["Ensemble", "KADID10K", "LIVEC", "SPAQ", "KONIQ10K"])
+        # tb.add_row(['SRCC', srcc["kadid10k"]['ensemble'], srcc["livec"]['ensemble'], srcc["spaq"]['ensemble'], srcc["koniq10k"]['ensemble']])
+        # tb.add_row(['PLCC', plcc["kadid10k"]['ensemble'], plcc["livec"]['ensemble'], plcc["spaq"]['ensemble'], plcc["koniq10k"]['ensemble']])
+        # print(tb)
 
-        f = open(os.path.join(self.config.result_path, r'Baseline.txt'), 'w')
-        f.write(str(tb))
-        f.close()
+        # f = open(os.path.join(self.config.result_path, r'Baseline.txt'), 'w')
+        # f.write(str(tb))
+        # f.close()
 
         for epoch in range(self.start_epoch, self.max_epochs):
             _ = self._train_single_epoch(epoch)
@@ -230,6 +219,31 @@ class Trainer(object):
                 start_time = time.time()
 
         self.train_loss.append([loss_corrected, e2e_loss_corrected, ind_loss_corrected, ldiv_loss_corrected, udiv_loss_corrected])
+        srcc, plcc, n = self._eval(self.model) # n is the number of heads
+        if self.config.train_txt == 'train_clive_koniq_binary.txt': weight_srcc = (1162*srcc["livec"]['ensemble'] + 10073*srcc["koniq10k"]['ensemble'])/(1162+10073)
+        elif self.config.train_txt == 'train_clive_spaq_binary.txt':weight_srcc = (1162*srcc["livec"]['ensemble'] + 11125*srcc["spaq"]['ensemble'])/(1162+11125)
+        elif self.config.train_txt == 'train_koniq_spaq_binary.txt':weight_srcc = (10073*srcc["koniq10k"]['ensemble'] + 11125*srcc["spaq"]['ensemble'])/(10073+11125)
+        else: pass
+
+        # evaluate after every epoch
+        tb = pt.PrettyTable()
+        tb.field_names = ["Model1", "LIVEC", "SPAQ", "KONIQ10K"]
+        tb.add_row(['SRCC', srcc["livec"]['model{}'.format(0)], srcc["spaq"]['model{}'.format(0)], srcc["koniq10k"]['model{}'.format(0)]])
+        tb.add_row(['PLCC', plcc["livec"]['model{}'.format(0)], plcc["spaq"]['model{}'.format(0)], plcc["koniq10k"]['model{}'.format(0)]])
+        
+        for i in range(n-1): # do not include head1 and ensemble
+            tb.add_row(["Model{}".format(i+2),  "LIVEC", "SPAQ", "KONIQ10K"])
+            tb.add_row(['SRCC', srcc["livec"]['model{}'.format(i+1)], srcc["spaq"]['model{}'.format(i+1)], srcc["koniq10k"]['model{}'.format(i+1)]])
+            tb.add_row(['PLCC', plcc["livec"]['model{}'.format(i+1)], plcc["spaq"]['model{}'.format(i+1)], plcc["koniq10k"]['model{}'.format(i+1)]])
+
+        tb.add_row(["Ensemble", "LIVEC", "SPAQ", "KONIQ10K"])
+        tb.add_row(['SRCC', srcc["livec"]['ensemble'], srcc["spaq"]['ensemble'], srcc["koniq10k"]['ensemble']])
+        tb.add_row(['PLCC', plcc["livec"]['ensemble'], plcc["spaq"]['ensemble'], plcc["koniq10k"]['ensemble']])
+        print(tb)
+
+        f = open(os.path.join(self.config.result_path, r'results_{}.txt'.format(epoch)), 'w')
+        f.write(str(tb))
+        f.close()
 
         if (epoch+1) % self.epochs_per_save == 0:
             model_name = '{}-{:0>5d}.pt'.format(self.model_name, epoch)
@@ -241,26 +255,22 @@ class Trainer(object):
                 'train_loss': self.train_loss,
             }, model_name)
 
-        # evaluate after every epoch
-        srcc, plcc, n = self._eval(self.model) # n is the number of heads
-        tb = pt.PrettyTable()
-        tb.field_names = ["Model1", "KADID10K", "LIVEC", "SPAQ", "KONIQ10K"]
-        tb.add_row(['SRCC', srcc["kadid10k"]['model{}'.format(0)], srcc["livec"]['model{}'.format(0)], srcc["spaq"]['model{}'.format(0)], srcc["koniq10k"]['model{}'.format(0)]])
-        tb.add_row(['PLCC', plcc["kadid10k"]['model{}'.format(0)], plcc["livec"]['model{}'.format(0)], plcc["spaq"]['model{}'.format(0)], plcc["koniq10k"]['model{}'.format(0)]])
-        
-        for i in range(n-1): # do not include head1 and ensemble
-            tb.add_row(["Model{}".format(i+2), "KADID10K", "LIVEC", "SPAQ", "KONIQ10K"])
-            tb.add_row(['SRCC', srcc["kadid10k"]['model{}'.format(i+1)], srcc["livec"]['model{}'.format(i+1)], srcc["spaq"]['model{}'.format(i+1)], srcc["koniq10k"]['model{}'.format(i+1)]])
-            tb.add_row(['PLCC', plcc["kadid10k"]['model{}'.format(i+1)], plcc["livec"]['model{}'.format(i+1)], plcc["spaq"]['model{}'.format(i+1)], plcc["koniq10k"]['model{}'.format(i+1)]])
-
-        tb.add_row(["Ensemble", "KADID10K", "LIVEC", "SPAQ", "KONIQ10K"])
-        tb.add_row(['SRCC', srcc["kadid10k"]['ensemble'], srcc["livec"]['ensemble'], srcc["spaq"]['ensemble'], srcc["koniq10k"]['ensemble']])
-        tb.add_row(['PLCC', plcc["kadid10k"]['ensemble'], plcc["livec"]['ensemble'], plcc["spaq"]['ensemble'], plcc["koniq10k"]['ensemble']])
-        print(tb)
-
-        f = open(os.path.join(self.config.result_path, r'results_{}.txt'.format(epoch)), 'w')
-        f.write(str(tb))
-        f.close()
+            if self.val_value < weight_srcc:
+                # save best path
+                model_name = 'best.pt'
+                model_name = os.path.join(self.ckpt_best_path, model_name)
+                self._save_checkpoint({
+                    'epoch': epoch,
+                    'state_dict': self.model.state_dict(),
+                    'optimizer': self.optimizer.state_dict(),
+                    'train_loss': self.train_loss,
+                }, model_name)
+                # save best result
+                f = open(os.path.join(self.ckpt_best_path, r'best.txt'.format(epoch)), 'w')
+                f.write(str(tb))
+                f.close()
+                # updata val_value
+                self.val_value = weight_srcc
 
         return self.loss.data.item()
 
@@ -291,10 +301,55 @@ class Trainer(object):
     def _eval(self, model):
         srcc, plcc = {}, {}
         model.eval()
-        srcc['kadid10k'], plcc['kadid10k'], _ = self._eval_single(model, self.kadid10k_loader)
-        srcc['livec'], plcc['livec'], _ = self._eval_single(model, self.livec_loader)
-        srcc['spaq'], plcc['spaq'], _ = self._eval_single(model, self.spaq_loader)
-        srcc['koniq10k'], plcc['koniq10k'], n = self._eval_single(model, self.koniq10k_loader)
+
+        if self.config.train_txt == 'train_clive_koniq_binary.txt':
+            livec_val_loader = self._loader(csv_file = os.path.join(self.config.livec_set, 'splits2', str(self.config.split), 'clive_val.txt'),
+                                            img_dir = self.config.livec_set, transform = self.test_transform, test = True, shuffle = False, 
+                                            pin_memory = True, num_workers = 0)
+            koniq10k_val_loader = self._loader(csv_file = os.path.join(self.config.koniq10k_set, 'splits2', str(self.config.split), 'koniq10k_val.txt'),
+                                            img_dir = self.config.koniq10k_set, transform = self.test_transform, test = True, shuffle = False, 
+                                            pin_memory = True, num_workers = 0)
+            spaq_test_loader = self._loader(csv_file = os.path.join(self.config.spaq_set, 'spaq_test.txt'),
+                                            img_dir = self.config.spaq_set, transform = self.test_transform, test = True, shuffle = False, 
+                                            pin_memory = True, num_workers = 8)
+           
+
+            srcc['livec'], plcc['livec'], _ = self._eval_single(model, livec_val_loader)
+            srcc['koniq10k'], plcc['koniq10k'], n = self._eval_single(model, koniq10k_val_loader)
+            srcc['spaq'], plcc['spaq'], _ = self._eval_single(model, spaq_test_loader)
+
+        elif self.config.train_txt == 'train_clive_spaq_binary.txt':
+            livec_val_loader = self._loader(csv_file = os.path.join(self.config.livec_set, 'splits2', str(self.config.split), 'clive_val.txt'),
+                                            img_dir = self.config.livec_set, transform = self.test_transform, test = True, shuffle = False, 
+                                            pin_memory = True, num_workers = 0)
+            koniq10k_test_loader = self._loader(csv_file = os.path.join(self.config.koniq10k_set, 'koniq10k_test.txt'),
+                                            img_dir = self.config.koniq10k_set, transform = self.test_transform, test = True, shuffle = False, 
+                                            pin_memory = True, num_workers = 0)
+            spaq_val_loader = self._loader(csv_file = os.path.join(self.config.spaq_set, 'splits2', str(self.config.split), 'spaq_val.txt'),
+                                            img_dir = self.config.spaq_set, transform = self.test_transform, test = True, shuffle = False, 
+                                            pin_memory = True, num_workers = 8)
+           
+            srcc['livec'], plcc['livec'], _ = self._eval_single(model, livec_val_loader)
+            srcc['koniq10k'], plcc['koniq10k'], n = self._eval_single(model, koniq10k_test_loader)
+            srcc['spaq'], plcc['spaq'], _ = self._eval_single(model, spaq_val_loader)
+
+        elif self.config.train_txt == 'train_koniq_spaq_binary.txt':
+            livec_test_loader = self._loader(csv_file = os.path.join(self.config.livec_set, 'clive_test.txt'),
+                                            img_dir = self.config.livec_set, transform = self.test_transform, test = True, shuffle = False, 
+                                            pin_memory = True, num_workers = 0)
+            koniq10k_val_loader = self._loader(csv_file = os.path.join(self.config.koniq10k_set, 'splits2', str(self.config.split), 'koniq10k_val.txt'),
+                                            img_dir = self.config.koniq10k_set, transform = self.test_transform, test = True, shuffle = False, 
+                                            pin_memory = True, num_workers = 0)
+            spaq_val_loader = self._loader(csv_file = os.path.join(self.config.spaq_set, 'splits2', str(self.config.split), 'spaq_val.txt'),
+                                            img_dir = self.config.spaq_set, transform = self.test_transform, test = True, shuffle = False, 
+                                            pin_memory = True, num_workers = 8)
+
+            srcc['livec'], plcc['livec'], _ = self._eval_single(model, livec_test_loader)
+            srcc['koniq10k'], plcc['koniq10k'], n = self._eval_single(model, koniq10k_val_loader)
+            srcc['spaq'], plcc['spaq'], _ = self._eval_single(model, spaq_val_loader)
+        else:
+            pass
+
         return srcc, plcc, n
 
     def _load_checkpoint(self, ckpt):
