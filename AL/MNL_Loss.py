@@ -50,7 +50,7 @@ class Ncl_loss(torch.nn.Module):
                 y1_var_sum  += y1_var[i+1].clone()
                 y2_sum  += y2[i+1].clone()
                 y2_var_sum  += y2_var[i+1].clone()
-            p_bar = self._pcal(y1_sum/n, y1_var_sum/(n*n), y2_sum/n, y2_var_sum/(n*n))
+            p_bar = self._pcal(y1_sum/n, y1_var_sum/n, y2_sum/n, y2_var_sum/n)
             
             e2e_loss = self._fid(p_bar, g)
         # return
