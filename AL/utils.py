@@ -258,7 +258,7 @@ def pair_wise(img_sampled, mos_sampled, std_sampled, img_unlabeled, num_pairs=50
             prob_label = 0.5 * (1 + math.erf(diff / sq))
             binary_label = 1 if mos_sampled[koniq_idxs[i]]>mos_sampled[koniq_idxs[j]] else 0
             un_img1, un_img2 = unlabel_1[step%len(img_unlabeled)], unlabel_2[step%len(img_unlabeled)]
-            wstr = "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(img1,img2,un_img1,un_img2, prob_label,\
+            wstr = "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(img1,img2,un_img1,un_img2, binary_label,\
                                  std_sampled[koniq_idxs[i]],std_sampled[koniq_idxs[j]],binary_label)
             wfile.write(wstr)
     return 0
