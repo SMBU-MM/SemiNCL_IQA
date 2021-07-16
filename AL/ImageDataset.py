@@ -92,9 +92,35 @@ class ImageDataset(Dataset):
                 I4 = self.transform(I4)
 
             y = torch.FloatTensor(self.data.iloc[index, 4:].tolist())
-            sample = {'I1': I1, 'I2': I2, 'I3': I3, 'I4': I4, 'y': y[0], 'std1':y[1], 'std2':y[2], 'yb': y[3]}
+            sample = {'I1': I1, 'I2': I2, 'I3': I3, 'I4': I4, 'y': y[0], 'std1':y[1], 'std2':y[2], 'yb': y[3]} #'I3': I3, 'I4': I4,
 
         return sample
 
     def __len__(self):
         return len(self.data.index)
+
+class QueryLoad(Dataset):
+    def __init__(self, img_names1, img_names2, img_dir,
+                 transform=None,
+                 get_loader=get_default_img_loader):
+        print('start loading  data...')
+        self.img_names1 = img_names1
+        self.img_names2 = img_names2
+        print('%d data successfully loaded!' % self.img_names1.shape[0])
+        self.img_dir = img_dir
+        self.transform = transform
+        self.loader = get_loader()
+
+    def __getitem__(self, index):
+        image_name1 = os.path.join(self.img_dir, self.img_names1[index])
+        image_name2 = os.path.join(self.img_dir, self.img_names2[index])
+        I1 = self.loader(image_name1)
+        I2 = self.loader(image_name2)
+        if self.transform is not None:
+            I1 = self.transform(I1)
+            I2 = self.transform(I2)
+        sample = {'I1': I1, 'I2': I2}
+        return sample
+        
+    def __len__(self):
+        return self.img_names1.shape[0]

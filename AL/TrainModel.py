@@ -41,7 +41,8 @@ class Trainer(object):
 
         # training set configuration
         self.train_loader = self._loader(csv_file = config.train_file, img_dir = config.trainset, \
-                                         transform = self.train_transform, batch_size = config.batch_size)   
+                                         transform = self.train_transform, batch_size = config.batch_size, \
+                                         drop_last = True)   
         self.valid_best= 0.0                                 
         # testing set configuration
         self.writer = SummaryWriter(os.path.join(config.runs_path, "{}".format(config.round)))
@@ -82,7 +83,7 @@ class Trainer(object):
                             step_size=config.decay_interval,
                             gamma=config.decay_ratio)
 
-    def _loader(self, csv_file, img_dir, transform, test=False, batch_size=1, shuffle=True, pin_memory=True, num_workers=16):
+    def _loader(self, csv_file, img_dir, transform, test=False, batch_size=16, shuffle=True, pin_memory=True, num_workers=16, drop_last=False):
         data = ImageDataset(csv_file = csv_file,
                         img_dir = img_dir,
                         transform = transform,
@@ -91,7 +92,8 @@ class Trainer(object):
                         batch_size = batch_size,
                         shuffle = shuffle,
                         pin_memory = pin_memory,
-                        num_workers = num_workers)
+                        num_workers = num_workers,
+                        drop_last = drop_last)
         return train_loader
 
     def fit(self):
@@ -99,17 +101,20 @@ class Trainer(object):
             _ = self._train_single_epoch(epoch)
             self.scheduler.step()
 
-    def _train_single_batch(self, model, x1, x2, x3, x4, g=None, wfile=None):
-        y1, y1_var, _, _ = model(x1)
-        y2, y2_var, _, _ = model(x2)
-        e2e_loss, ind_loss, ldiv_loss = self.ncl_fn(y1, y1_var,y2, y2_var, g)
+    def _train_single_batch(self, model, x1, x2, x3=None, x4=None, g=None, wfile=None):
+        y1, y1_var, y1_ens, y1_var_ens = model(x1)
+        y2, y2_var, y2_ens, y2_var_ens = model(x2)
+        e2e_loss, ind_loss, ldiv_loss = self.ncl_fn(y1, y1_var, y2, y2_var, y1_ens, y1_var_ens, y2_ens, y2_var_ens, g)
 
-        y3, y3_var, _, _ = model(x3)
-        y4, y4_var, _, _ = model(x4)
-        udiv_loss = self.ncl_fn(y3, y3_var, y4, y4_var)
-        if not wfile == None:
-            self._save_quality(wfile, y1, y2, y3, y4)
-        return e2e_loss, ind_loss, ldiv_loss, udiv_loss
+        if not x3 == None:
+            y3, y3_var, y3_ens, y3_var_ens = model(x3)
+            y4, y4_var, y4_ens, y4_var_ens = model(x4)
+            udiv_loss = self.ncl_fn(y3, y3_var, y4, y4_var, y3_ens, y3_var_ens, y4_ens, y4_var_ens)
+            if not wfile == None:
+                pass
+                #self._save_quality(wfile, y1, y2, y3, y4)
+            return e2e_loss, ind_loss, ldiv_loss, udiv_loss
+        return e2e_loss, ind_loss, ldiv_loss, ldiv_loss
 
     def _save_quality(self, wfile, y1, y2, y3, y4):
         y = []
@@ -132,8 +137,8 @@ class Trainer(object):
         local_counter = epoch * num_steps_per_epoch + 1
         start_time = time.time()
         beta = 0.9
-        for name, para in self.model.named_parameters():
-            print('{} parameters requires_grad:{}'.format(name, para.requires_grad))
+        # for name, para in self.model.named_parameters():
+        #     print('{} parameters requires_grad:{}'.format(name, para.requires_grad))
 
         running_loss = 0 if epoch == 0 else self.train_loss[-1][0]
         running_e2e_loss = 0 if epoch == 0 else self.train_loss[-1][1]
@@ -151,18 +156,20 @@ class Trainer(object):
             for step, sample_batched in enumerate(self.train_loader, 0):
                 if step < self.start_step:
                     continue
-                x1, x2, x3, x4, g = Variable(sample_batched['I1']).cuda(), Variable(sample_batched['I2']).cuda(),\
-                                    Variable(sample_batched['I3']).cuda(), Variable(sample_batched['I4']).cuda(),\
-                                    Variable(sample_batched['y']).view(-1,1).cuda()
-
+                x1, x2, g = Variable(sample_batched['I1']).cuda(), Variable(sample_batched['I2']).cuda(),\
+                            Variable(sample_batched['y']).view(-1,1).cuda()
+                            #Variable(sample_batched['I3']).cuda(), Variable(sample_batched['I4']).cuda(),\      
                 self.optimizer.zero_grad()
-                e2e_loss, ind_loss, ldiv_loss, udiv_loss = self._train_single_batch(self.model, x1, x2, x3, x4, g, wfile)
-                if self.config.loss == 'ind':
-                    self.loss = self.config.weight_ind*ind_loss #+ e2e_loss - self.config.weight_udiv*udiv_loss 
-                elif self.config.loss == 'ncl':
-                    self.loss =  self.config.weight_ind*ind_loss + e2e_loss
-                elif self.config.loss == 'semi_ncl':
-                    self.loss =  self.config.weight_ind*ind_loss + e2e_loss - self.config.weight_udiv*udiv_loss 
+                if self.config.loss == 'naive':
+                    e2e_loss, ind_loss, ldiv_loss, udiv_loss = self._train_single_batch(self.model, x1=x1, x2=x2, g=g) #, udiv_loss
+                    self.loss = torch.mean(ind_loss) #+ e2e_loss - self.config.weight_udiv*udiv_loss 
+                elif self.config.loss == 'joint':
+                    e2e_loss, ind_loss, ldiv_loss, udiv_loss = self._train_single_batch(self.model, x1=x1, x2=x2, g=g) #, udiv_loss
+                    self.loss = torch.mean(ind_loss + e2e_loss)
+                elif self.config.loss == 'ssl':
+                    x3, x4 = Variable(sample_batched['I3']).cuda(), Variable(sample_batched['I4']).cuda()
+                    e2e_loss, ind_loss, ldiv_loss, udiv_loss = self._train_single_batch(self.model, x1=x1, x2=x2, x3=x3, x4=x4, g=g) #, udiv_loss
+                    self.loss = torch.mean(ind_loss + e2e_loss - self.config.weight_div*udiv_loss)
                 else:
                     pass
 
@@ -173,16 +180,16 @@ class Trainer(object):
                 running_loss = beta * running_loss + (1 - beta) * self.loss.data.item()
                 loss_corrected = running_loss / (1 - beta ** local_counter)
 
-                running_e2e_loss = beta * running_e2e_loss + (1 - beta) * e2e_loss.data.item()
+                running_e2e_loss = beta * running_e2e_loss + (1 - beta) * torch.mean(e2e_loss).data.item()
                 e2e_loss_corrected = running_e2e_loss / (1 - beta ** local_counter)
 
-                running_ind_loss = beta * running_ind_loss + (1 - beta) * ind_loss.data.item()
+                running_ind_loss = beta * running_ind_loss + (1 - beta) * torch.mean(ind_loss).data.item()
                 ind_loss_corrected = running_ind_loss / (1 - beta ** local_counter)
 
-                running_ldiv_loss = beta * running_ldiv_loss + (1 - beta) * ldiv_loss.data.item()
+                running_ldiv_loss = beta * running_ldiv_loss + (1 - beta) * torch.mean(ldiv_loss).data.item()
                 ldiv_loss_corrected = running_ldiv_loss / (1 - beta ** local_counter)
 
-                running_udiv_loss = beta * running_udiv_loss + (1 - beta) * udiv_loss.data.item()
+                running_udiv_loss = beta * running_udiv_loss + (1 - beta) * torch.mean(udiv_loss).data.item()
                 udiv_loss_corrected = running_udiv_loss / (1 - beta ** local_counter)
 
                 self.loss_count += 1
@@ -201,7 +208,7 @@ class Trainer(object):
                 format_str = ('(R: %d, E:%d, S:%d / %d) [Loss = %.4f E2E Loss = %.4f, Ind Loss = %.4f, LDiv Loss = %.8f'
                             ', UDiv Loss = %.08f] (%.1f samples/sec; %.3f  sec/batch)')
                 print(format_str % (self.config.round, epoch, step, num_steps_per_epoch, loss_corrected, e2e_loss_corrected, 
-                	  ind_loss_corrected, ldiv_loss_corrected, udiv_loss_corrected, examples_per_sec, duration_corrected))
+                      ind_loss_corrected, ldiv_loss_corrected, udiv_loss_corrected, examples_per_sec, duration_corrected))
 
                 local_counter += 1
                 self.start_step = 0
@@ -209,40 +216,45 @@ class Trainer(object):
 
         self.train_loss.append([loss_corrected, e2e_loss_corrected, ind_loss_corrected, ldiv_loss_corrected, udiv_loss_corrected])
         # evaluate after every epoch
-        srcc, plcc, n = self._eval(self.model) # n is the number of heads
-        valid_srcc = srcc["spaq_valid"]['ensemble']
-        tb = utils.print_tb(srcc, plcc, n)
-        print(tb)
-        f = open(os.path.join(self.config.result_path, r'results_{}.txt'.format(epoch)), 'w')
-        f.write(str(tb))
-        f.close()
+       
+        valid_srcc = 0
+        if epoch > 5:
+            # evaluate after every epoch
+            srcc, plcc, n = self._eval(self.model) # n is the number of heads
+            valid_srcc = srcc["koniq10k_valid"]['ensemble'] + srcc["kadid10k_valid"]['ensemble']
+            tb = utils.print_tb(srcc, plcc, n)
+            print(tb)
+            f = open(os.path.join(self.config.result_path, r'results_{}.txt'.format(epoch)), 'w')
+            f.write(str(tb))
+            f.close()
 
         if (epoch+1) % self.epochs_per_save == 0:
-            model_name = '{}-{:0>5d}.pt'.format(self.model_name, epoch)
-            model_name = os.path.join(self.ckpt_path, model_name)
-            self._save_checkpoint({
-                'epoch': epoch,
-                'state_dict': self.model.state_dict(),
-                'optimizer': self.optimizer.state_dict(),
-                'train_loss': self.train_loss,
-            }, os.path.join(self.ckpt_path, 'checkpoint.pt'))
-
-            if self.valid_best < valid_srcc:
-                # save best path
-                model_name = 'best.pt'
-                model_name = os.path.join(self.ckpt_best_path, model_name)
+            if epoch == 2:
+                model_name = '{}-{:0>5d}.pt'.format(self.model_name, epoch)
+                model_name = os.path.join(self.ckpt_path, model_name)
                 self._save_checkpoint({
                     'epoch': epoch,
                     'state_dict': self.model.state_dict(),
-                    # 'optimizer': self.optimizer.state_dict(),
-                    # 'train_loss': self.train_loss,
-                }, model_name)
-                # save best result
-                f = open(os.path.join(self.ckpt_best_path, r'best.txt'.format(epoch)), 'w')
-                f.write(str(tb))
-                f.close()
-                # updata valid_best
-                self.valid_best = valid_srcc
+                    'optimizer': self.optimizer.state_dict(),
+                    'train_loss': self.train_loss,
+                }, os.path.join(self.ckpt_path, 'checkpoint.pt'))
+
+        if self.valid_best < valid_srcc and epoch > 6:
+            # save best path
+            model_name = 'best.pt'
+            model_name = os.path.join(self.ckpt_best_path, model_name)
+            self._save_checkpoint({
+                'epoch': epoch,
+                'state_dict': self.model.state_dict(),
+                # 'optimizer': self.optimizer.state_dict(),
+                # 'train_loss': self.train_loss,
+            }, model_name)
+            # save best result
+            f = open(os.path.join(self.ckpt_best_path, r'best.txt'.format(epoch)), 'w')
+            f.write(str(tb))
+            f.close()
+            # updata valid_best
+            self.valid_best = valid_srcc
 
         return self.loss.data.item()
 
@@ -252,14 +264,17 @@ class Trainer(object):
         for step, sample_batched in enumerate(loader, 0):
             x, y = Variable(sample_batched['I']).cuda(), sample_batched['mos']
             y_bar, _, y_ens, _ = model(x)
-            q_mos.append(y.data.numpy())
-            q_ens.append(y_ens.cpu().data.numpy())
+            for item in y.data.numpy().tolist():
+                q_mos.append(item)
+            for item in y_ens.cpu().data.numpy().tolist():
+                q_ens.append(item)
             if step == 0:
                 # claim a list
                 q_hat = [[] for i in range(len(y_bar))] 
                 
             for i in range(len(y_bar)):
-                q_hat[i].append(y_bar[i].cpu().data.numpy())
+                for item in y_bar[i].cpu().data.numpy().tolist():
+                    q_hat[i].append(item)
 
         for i in range(len(q_hat)):
             srcc['model{}'.format(i)] = scipy.stats.mstats.spearmanr(x=q_mos, y=q_hat[i])[0]
@@ -273,22 +288,35 @@ class Trainer(object):
     def _eval(self, model):
         srcc, plcc = {}, {}
         model.eval()
-        spaq_valid_loader = self._loader(csv_file = os.path.join(self.config.spaq_set, 'splits{}'.format(self.config.path_idx), str(self.config.split), 'spaq_valid_score.txt'),
-                                        img_dir = self.config.spaq_set, transform = self.test_transform, test = True, shuffle = False, 
-                                        pin_memory = True, num_workers = 0)
-        spaq_test_loader = self._loader(csv_file = os.path.join(self.config.spaq_set, 'splits{}'.format(self.config.path_idx), str(self.config.split), 'spaq_test_score.txt'),
-                                        img_dir = self.config.spaq_set, transform = self.test_transform, test = True, shuffle = False, 
-                                        pin_memory = True, num_workers = 0)
-        koniq_active_loader = self._loader(csv_file = os.path.join(self.config.koniq10k_set, 'splits{}'.format(self.config.path_idx), str(self.config.split), 'koniq10k_train_score.txt'),
-                                        img_dir = self.config.koniq10k_set, transform = self.test_transform, test = True, shuffle = False, 
-                                        pin_memory = True, num_workers = 0)
-        koniq_test_loader = self._loader(csv_file = os.path.join(self.config.koniq10k_set, 'splits{}'.format(self.config.path_idx), str(self.config.split), 'koniq10k_test_score.txt'),
-                                        img_dir = self.config.koniq10k_set, transform = self.test_transform, test = True, shuffle = False, 
-                                        pin_memory = True, num_workers = 0)
-        srcc['spaq_valid'], plcc['spaq_valid'], _ = self._eval_single(model, spaq_valid_loader)
-        srcc['spaq_test'], plcc['spaq_test'], _ = self._eval_single(model, spaq_test_loader)
+        start_time = time.time()
+        path = "/home/zhihua/Active_learning_head4/IQA_database"
+        koniq_valid_loader = self._loader(csv_file = os.path.join(path, 'splits{}'.format(self.config.path_idx), str(self.config.split), 'koniq10k_valid_score.txt'),
+                                img_dir = self.config.koniq10k_set, batch_size=8, transform = self.test_transform, test = True, shuffle = False, 
+                                pin_memory = True, num_workers = 8)
+        koniq_active_loader = self._loader(csv_file = os.path.join(self.config.trainset_path,'unlabeled_koniq_round{}.txt'.format(self.config.round)),
+                                img_dir = self.config.trainset, batch_size=8, transform = self.test_transform, test = True, shuffle = False, 
+                                pin_memory = True, num_workers = 8)
+        koniq_test_loader = self._loader(csv_file = os.path.join(path, 'splits{}'.format(self.config.path_idx), str(self.config.split), 'koniq10k_test_score.txt'),
+                                img_dir = self.config.koniq10k_set, batch_size=8, transform = self.test_transform, test = True, shuffle = False, 
+                                pin_memory = True, num_workers = 8)
+        kadid_valid_loader = self._loader(csv_file = os.path.join(path, 'splits{}'.format(self.config.path_idx), str(self.config.split), 'kadid10k_valid_score.txt'),
+                                img_dir = self.config.kadid10k_set, batch_size=8, transform = self.test_transform, test = True, shuffle = False, 
+                                pin_memory = True, num_workers = 8)
+        kadid_active_loader = self._loader(csv_file = os.path.join(self.config.trainset_path,'unlabeled_kadid_round{}.txt'.format(self.config.round)),
+                                img_dir = self.config.trainset, batch_size=8, transform = self.test_transform, test = True, shuffle = False, 
+                                pin_memory = True, num_workers = 8)
+        kadid_test_loader = self._loader(csv_file = os.path.join(path, 'splits{}'.format(self.config.path_idx), str(self.config.split), 'kadid10k_test_score.txt'),
+                                img_dir = self.config.kadid10k_set, batch_size=8, transform = self.test_transform, test = True, shuffle = False, 
+                                pin_memory = True, num_workers = 8)
+        srcc['koniq10k_valid'], plcc['koniq10k_valid'], _ = self._eval_single(model, koniq_valid_loader)
         srcc['koniq10k_active'], plcc['koniq10k_active'], _ = self._eval_single(model, koniq_active_loader)
         srcc['koniq10k_test'], plcc['koniq10k_test'], n = self._eval_single(model, koniq_test_loader)
+        
+        srcc['kadid10k_valid'], plcc['kadid10k_valid'], _ = self._eval_single(model, kadid_valid_loader)
+        srcc['kadid10k_active'], plcc['kadid10k_active'], _ = self._eval_single(model, kadid_active_loader)
+        srcc['kadid10k_test'], plcc['kadid10k_test'], n = self._eval_single(model, kadid_test_loader)
+
+        print('[*] testing time: {}'.format(time.time()-start_time))
         return srcc, plcc, n
 
     def _load_checkpoint(self, ckpt):
@@ -304,6 +332,8 @@ class Trainer(object):
                     param_group['initial_lr'] = self.initial_lr
             print("[*] loaded checkpoint '{}' (epoch {})"
                   .format(ckpt, checkpoint['epoch']))
+            # delete the file
+            os.remove(ckpt)
         else:
             print("[!] no checkpoint found at '{}'".format(ckpt))
 
