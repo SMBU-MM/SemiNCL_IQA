@@ -1,0 +1,124 @@
+import numpy as np
+from itertools import combinations
+import random, math
+
+eps = 1e-8
+def _fid(p, g):
+    loss = 1 - (np.sqrt(p * g + eps) + np.sqrt((1 - p) * (1 - g) + eps))
+    return loss
+
+def _pcal(y1, y1_var, y2, y2_var):
+    y_diff = (y1 - y2)
+    y_var = y1_var + y2_var 
+    p = 0.5 * (1 + math.erf(y_diff / np.sqrt(2 * y_var)))
+    return p
+
+def _consistency(ps):
+    p1 = []
+    p0 = []
+    for p in ps:
+        if p > 0.55 and p < 0.99: 
+            p1.append(1)
+        if p < 0.45 and p > 0.01:
+            p0.append(0)
+    if len(p1) == len(ps):
+        return True, 1
+    if len(p0) == len(ps):
+        return True, 0
+    return False, 0
+        
+imgs = np.loadtxt('unlabeled.txt', dtype=str, comments='#', delimiter='\t', converters=None, skiprows=0, usecols=0, unpack=False, ndmin=0)
+moss = np.loadtxt('unlabeled.txt', dtype=float, comments='#', delimiter='\t', converters=None, skiprows=0, usecols=1, unpack=False, ndmin=0)
+
+file = 'DataParallel-00003.txt' 
+pred3_1 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=1, unpack=False, ndmin=0)
+pred3_2 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=2, unpack=False, ndmin=0)
+pred3_3 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=3, unpack=False, ndmin=0)
+
+file = 'DataParallel-00004.txt' 
+pred4_1 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=1, unpack=False, ndmin=0)
+pred4_2 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=2, unpack=False, ndmin=0)
+pred4_3 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=3, unpack=False, ndmin=0)
+
+file = 'DataParallel-00005.txt' 
+pred5_1 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=1, unpack=False, ndmin=0)
+pred5_2 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=2, unpack=False, ndmin=0)
+pred5_3 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=3, unpack=False, ndmin=0)
+
+file = 'DataParallel-00006.txt' 
+pred6_1 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=1, unpack=False, ndmin=0)
+pred6_2 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=2, unpack=False, ndmin=0)
+pred6_3 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=3, unpack=False, ndmin=0)
+
+file = 'DataParallel-00007.txt' 
+pred7_1 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=1, unpack=False, ndmin=0)
+pred7_2 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=2, unpack=False, ndmin=0)
+pred7_3 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=3, unpack=False, ndmin=0)
+
+file = 'DataParallel-00008.txt' 
+pred8_1 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=1, unpack=False, ndmin=0)
+pred8_2 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=2, unpack=False, ndmin=0)
+pred8_3 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=3, unpack=False, ndmin=0)
+
+file = 'DataParallel-00009.txt' 
+pred9_1 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=1, unpack=False, ndmin=0)
+pred9_2 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=2, unpack=False, ndmin=0)
+pred9_3 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=3, unpack=False, ndmin=0)
+
+file = 'DataParallel-00010.txt' 
+pred10_1 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=1, unpack=False, ndmin=0)
+pred10_2 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=2, unpack=False, ndmin=0)
+pred10_3 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=3, unpack=False, ndmin=0)
+
+file = 'DataParallel-00011.txt' 
+pred11_1 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=1, unpack=False, ndmin=0)
+pred11_2 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=2, unpack=False, ndmin=0)
+pred11_3 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=3, unpack=False, ndmin=0)
+
+preds = [pred3_1, pred3_2, pred3_3, pred4_1, pred4_2, pred4_3, pred5_1, pred5_2, pred5_3, \
+         pred6_1, pred6_2, pred6_3, pred7_1, pred7_2, pred7_3, pred8_1, pred8_2, pred8_3, ##, \
+         pred9_1, pred9_2, pred9_3, pred10_1, pred10_2, pred10_3, pred11_1, pred11_2, pred11_3]
+n = imgs.shape[0]
+combs = combinations([i for i in range(n)], 2)
+comb_lists = []
+for item in combs:
+    comb_lists.append(item)
+random.shuffle(comb_lists)
+count_1 = 0
+count_2 = 0
+with open(file.replace('DataParallel', 'p'), 'w') as wfile:
+    for step, (i, j) in enumerate(comb_lists):
+        if not i==j:
+            gt = 0.0 if  moss[i] < moss[j] else 1.0
+            ps = []
+            for m in range(len(preds)):
+                ps.append(_pcal(preds[m][i], np.ones(preds[m][i].shape), preds[m][j], np.ones(preds[m][j].shape)))
+            flag, label = _consistency(ps)
+            if flag == True and np.std(np.array(ps)) < 0.005:
+                count_1 += 1
+                if label == gt:
+                    count_2 += 1
+                wstr = '{},{},{},{}'.format(imgs[i], imgs[j], gt, label)
+                for p in ps:
+                    wstr += ',{}'.format(p) 
+                wfile.write(wstr + '\n')
+                if step %1000 == 0:
+                    print('completed:', step, count_1)
+                if count_1 > 30000:
+                    break
+ 
+print(count_2/count_1)
+# count =0              
+# for img1, img2, bl in zip(imgs1.tolist(), imgs2.tolist(), bls.tolist()):
+#     img1 = img1#.replace('kadid10k/', '').replace('koniq-10k/', '')
+#     img2 = img2#.replace('kadid10k/', '').replace('koniq-10k/', '')
+#     img1_idx = img_gt.tolist().index(img1)
+#     img2_idx = img_gt.tolist().index(img2) 
+#     mos1 = moss[img1_idx]    
+#     mos2 = moss[img2_idx] 
+#     gt = 1.0 if mos1 > mos2 else 0.0
+#     if gt == bl:
+#         count += 1
+# print('acc:{}'.format(count/len(bls)))
+        
+    
