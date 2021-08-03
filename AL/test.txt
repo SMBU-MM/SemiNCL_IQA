@@ -1,6 +1,6 @@
 import numpy as np
 from itertools import combinations
-import random, math
+import random, math, copy
 
 eps = 1e-8
 def _fid(p, g):
@@ -75,6 +75,10 @@ pred11_1 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters
 pred11_2 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=2, unpack=False, ndmin=0)
 pred11_3 = np.loadtxt(file, dtype=float, comments='#', delimiter=',', converters=None, skiprows=0, usecols=3, unpack=False, ndmin=0)
 
+unlabel_1 = copy.deepcopy(imgs.tolist())
+unlabel_2 = copy.deepcopy(imgs.tolist())
+random.shuffle(unlabel_2)
+random.shuffle(unlabel_1)
 preds = [pred3_1, pred3_2, pred3_3, pred4_1, pred4_2, pred4_3, pred5_1, pred5_2, pred5_3, \
          pred6_1, pred6_2, pred6_3, pred7_1, pred7_2, pred7_3, pred8_1, pred8_2, pred8_3, ##, \
          pred9_1, pred9_2, pred9_3, pred10_1, pred10_2, pred10_3, pred11_1, pred11_2, pred11_3]
@@ -86,7 +90,7 @@ for item in combs:
 random.shuffle(comb_lists)
 count_1 = 0
 count_2 = 0
-with open(file.replace('DataParallel', 'p'), 'w') as wfile:
+with open('train_0_pl.txt', 'w') as wfile:
     for step, (i, j) in enumerate(comb_lists):
         if not i==j:
             gt = 0.0 if  moss[i] < moss[j] else 1.0
@@ -98,27 +102,14 @@ with open(file.replace('DataParallel', 'p'), 'w') as wfile:
                 count_1 += 1
                 if label == gt:
                     count_2 += 1
-                wstr = '{},{},{},{}'.format(imgs[i], imgs[j], gt, label)
-                for p in ps:
-                    wstr += ',{}'.format(p) 
-                wfile.write(wstr + '\n')
+                un_img1, un_img2 = unlabel_1[step%len(imgs.tolist())], unlabel_2[step%len(imgs.tolist())]
+                wstr = '{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format(imgs[i], imgs[j], un_img1, un_img2, label, 0, 0, label)
+                # for p in ps:
+                #     wstr += ',{}'.format(p) 
+                wfile.write(wstr)
                 if step %1000 == 0:
                     print('completed:', step, count_1)
-                if count_1 > 30000:
+                if count_1 >= 30000:
                     break
  
 print(count_2/count_1)
-# count =0              
-# for img1, img2, bl in zip(imgs1.tolist(), imgs2.tolist(), bls.tolist()):
-#     img1 = img1#.replace('kadid10k/', '').replace('koniq-10k/', '')
-#     img2 = img2#.replace('kadid10k/', '').replace('koniq-10k/', '')
-#     img1_idx = img_gt.tolist().index(img1)
-#     img2_idx = img_gt.tolist().index(img2) 
-#     mos1 = moss[img1_idx]    
-#     mos2 = moss[img2_idx] 
-#     gt = 1.0 if mos1 > mos2 else 0.0
-#     if gt == bl:
-#         count += 1
-# print('acc:{}'.format(count/len(bls)))
-        
-    
