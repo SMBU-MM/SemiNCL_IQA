@@ -1,1 +1,1 @@
-# SemiNCL_MAD
+# SemiNCL_IQA
